@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reistijd thuis ⇄ werk</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-0: #f4f3f0;
+    --surface-1: #fcfcfb;
+    --border: #e2e0da;
+    --grid: #ebe9e4;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #7a7974;
+    --series-1: #2a78d6;
+    --series-1-band: rgba(42, 120, 214, 0.16);
+    --series-2: #eb6834;
+    --accent-bg: #e8f1fc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-0: #121211;
+      --surface-1: #1a1a19;
+      --border: #2e2e2c;
+      --grid: #272725;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #8f8e88;
+      --series-1: #3987e5;
+      --series-1-band: rgba(57, 135, 229, 0.22);
+      --series-2: #d95926;
+      --accent-bg: #1c2a3d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface-0); color: var(--text-primary);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 2px; letter-spacing: -0.01em; }
+  .sub { color: var(--text-secondary); margin: 0 0 18px; font-size: 14px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; align-items: center; }
+  .seg { display: inline-flex; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+  .seg button {
+    border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 14px;
+    padding: 6px 12px; border-radius: 7px; cursor: pointer; min-height: 34px;
+  }
+  .seg button[aria-pressed="true"] { background: var(--accent-bg); color: var(--text-primary); font-weight: 600; }
+  select {
+    font: inherit; font-size: 14px; color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 10px; padding: 7px 10px; min-height: 40px;
+  }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .tile .label { color: var(--text-secondary); font-size: 13px; }
+  .tile .value { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .tile .value small { font-size: 15px; font-weight: 500; color: var(--text-secondary); }
+  .tile .note { color: var(--text-muted); font-size: 12.5px; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 2px; }
+  .card .hint { color: var(--text-muted); font-size: 13px; margin: 0 0 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+  .sw.band { height: 10px; background: var(--series-1-band); }
+  .chart-wrap { position: relative; height: 280px; }
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.heat { border-collapse: separate; border-spacing: 2px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  table.heat th { color: var(--text-secondary); font-weight: 500; padding: 2px 4px; white-space: nowrap; }
+  table.heat th.day { text-align: left; padding-right: 8px; position: sticky; left: 0; background: var(--surface-1); z-index: 1; }
+  table.heat td { min-width: 38px; height: 28px; text-align: center; border-radius: 4px; }
+  table.heat td.empty { color: var(--text-muted); }
+  .scale { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+  .scale .bar { height: 8px; width: 140px; border-radius: 4px;
+    background: linear-gradient(90deg, #cde2fb, #86b6ef, #3987e5, #1c5cab, #0d366b); }
+  .empty-state { text-align: center; padding: 40px 16px; color: var(--text-secondary); }
+  footer { color: var(--text-muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Reistijd thuis ⇄ werk</h1>
+  <p class="sub" id="sub">Metingen laden…</p>
+
+  <div class="controls">
+    <div class="seg" id="dirSeg" role="group" aria-label="Richting">
+      <button data-v="heen" aria-pressed="true">Heen 7:00–7:30</button>
+      <button data-v="terug" aria-pressed="false">Terug 16:00–17:00</button>
+    </div>
+    <select id="daySel" aria-label="Weekdag">
+      <option value="">Alle werkdagen</option>
+      <option value="ma">Maandag</option><option value="di">Dinsdag</option>
+      <option value="wo">Woensdag</option><option value="do">Donderdag</option>
+      <option value="vr">Vrijdag</option>
+    </select>
+    <select id="periodSel" aria-label="Periode">
+      <option value="28">Laatste 4 weken</option>
+      <option value="91">Laatste 3 maanden</option>
+      <option value="0">Alles</option>
+    </select>
+  </div>
+
+  <div id="content">
+    <div class="tiles">
+      <div class="tile"><div class="label">Beste vertrektijd</div><div class="value" id="tBest">–</div><div class="note" id="tBestNote"></div></div>
+      <div class="tile"><div class="label">Typische reistijd</div><div class="value" id="tMed">–</div><div class="note" id="tMedNote"></div></div>
+      <div class="tile"><div class="label">Langste rit</div><div class="value" id="tMax">–</div><div class="note" id="tMaxNote"></div></div>
+      <div class="tile"><div class="label">Meetdagen</div><div class="value" id="tDays">–</div><div class="note" id="tDaysNote"></div></div>
+    </div>
+
+    <div class="card">
+      <h2>Reistijd per vertrektijd</h2>
+      <p class="hint">Mediaan over de gekozen periode, met de band waarin de helft van de ritten valt.</p>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--series-1)"></i>Mediaan</span>
+        <span><i class="sw band"></i>Meestal tussen (25–75%)</span>
+        <span><i class="sw" style="background:var(--series-2)"></i><span id="lastLabel">Laatste meetdag</span></span>
+      </div>
+      <div class="chart-wrap"><canvas id="chart" aria-label="Reistijd per vertrektijd"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Per dag</h2>
+      <p class="hint">Reistijd in minuten per vertrektijd, nieuwste dag bovenaan. Donkerder is langer.</p>
+      <div class="scroll"><table class="heat" id="heat"></table></div>
+      <div class="scale"><span id="scaleMin"></span><span class="bar"></span><span id="scaleMax"></span></div>
+    </div>
+  </div>
+
+  <div class="card empty-state" id="empty" hidden>
+    Nog geen metingen voor deze selectie.<br>
+    De eerste komen binnen op de eerstvolgende werkdag om 7:00.
+  </div>
+
+  <footer>Bron: TomTom Routing API (live verkeer), elke 5 minuten gemeten via GitHub Actions.</footer>
+</main>
+
+<script>
+const DAYNAMES = { ma: "maandag", di: "dinsdag", wo: "woensdag", do: "donderdag", vr: "vrijdag" };
+const SEQ = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5",
+             "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"];
+const state = { dir: "heen", day: "", period: 28 };
+let rows = [];
+let chart = null;
+
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmt = (m) => (Math.round(m * 10) / 10).toLocaleString("nl-NL", { maximumFractionDigits: 0 });
+const fmtDate = (d) => new Date(d + "T12:00:00").toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" });
+
+function quantile(sorted, q) {
+  if (!sorted.length) return null;
+  const pos = (sorted.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
+
+function parseCsv(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const head = lines[0].split(",");
+  return lines.slice(1).map((l) => {
+    const c = l.split(","), o = {};
+    head.forEach((h, i) => (o[h] = c[i]));
+    for (const k of ["reistijd_min", "zonder_verkeer_min", "vertraging_min", "afstand_km"]) o[k] = parseFloat(o[k]);
+    return o;
+  }).filter((r) => r.datum && !isNaN(r.reistijd_min));
+}
+
+function slotsFor(dir) {
+  const [s, e] = dir === "heen" ? [7 * 60, 7 * 60 + 30] : [16 * 60, 17 * 60];
+  const out = [];
+  for (let t = s; t <= e; t += 5) out.push(`${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`);
+  return out;
+}
+
+function filtered() {
+  let r = rows.filter((x) => x.richting === state.dir);
+  if (state.day) r = r.filter((x) => x.weekdag === state.day);
+  if (state.period) {
+    const cut = new Date(); cut.setDate(cut.getDate() - state.period);
+    const cutStr = cut.toISOString().slice(0, 10);
+    r = r.filter((x) => x.datum >= cutStr);
+  }
+  return r;
+}
+
+function render() {
+  const data = filtered();
+  const slots = slotsFor(state.dir);
+  const has = data.length > 0;
+  document.getElementById("content").hidden = !has;
+  document.getElementById("empty").hidden = has;
+  if (!has) return;
+
+  // Statistiek per vertrektijd
+  const per = slots.map((s) => {
+    const v = data.filter((r) => r.vertrektijd === s).map((r) => r.reistijd_min).sort((a, b) => a - b);
+    return { slot: s, n: v.length, med: quantile(v, 0.5), p25: quantile(v, 0.25), p75: quantile(v, 0.75) };
+  });
+  const dates = [...new Set(data.map((r) => r.datum))].sort().reverse();
+  const last = dates[0];
+  const lastRows = Object.fromEntries(data.filter((r) => r.datum === last).map((r) => [r.vertrektijd, r]));
+
+  // Tegels
+  const withData = per.filter((p) => p.n);
+  const best = withData.reduce((a, b) => (b.med < a.med ? b : a));
+  const all = data.map((r) => r.reistijd_min).sort((a, b) => a - b);
+  const worst = data.reduce((a, b) => (b.reistijd_min > a.reistijd_min ? b : a));
+  const bestRow = data.filter((r) => r.vertrektijd === best.slot);
+  document.getElementById("tBest").textContent = best.slot;
+  document.getElementById("tBestNote").textContent = `mediaan ${fmt(best.med)} min` +
+    (bestRow.length ? ` · aankomst rond ${addMin(best.slot, best.med)}` : "");
+  document.getElementById("tMed").innerHTML = `${fmt(quantile(all, 0.5))} <small>min</small>`;
+  document.getElementById("tMedNote").textContent = `meestal ${fmt(quantile(all, 0.25))}–${fmt(quantile(all, 0.75))} min`;
+  document.getElementById("tMax").innerHTML = `${fmt(worst.reistijd_min)} <small>min</small>`;
+  document.getElementById("tMaxNote").textContent = `${fmtDate(worst.datum)}, vertrek ${worst.vertrektijd}`;
+  document.getElementById("tDays").textContent = dates.length;
+  document.getElementById("tDaysNote").textContent = state.day ? `alleen ${DAYNAMES[state.day]}` : `${data.length} metingen`;
+  document.getElementById("lastLabel").textContent = `Laatste meetdag (${fmtDate(last)})`;
+
+  try { drawChart(slots, per, lastRows); } catch (e) { console.error("Grafiek niet geladen", e); }
+  drawHeat(slots, data, dates.slice(0, 30));
+}
+
+function addMin(hhmm, min) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const t = Math.round(h * 60 + m + min);
+  return `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+
+function drawChart(slots, per, lastRows) {
+  const s1 = css("--series-1"), s2 = css("--series-2"), band = css("--series-1-band");
+  const grid = css("--grid"), muted = css("--text-muted"), surf = css("--surface-1");
+  const ds = [
+    { label: "25%", data: per.map((p) => p.p25), borderWidth: 0, pointRadius: 0, fill: false },
+    { label: "75%", data: per.map((p) => p.p75), borderWidth: 0, pointRadius: 0, fill: "-1", backgroundColor: band },
+    { label: "Mediaan", data: per.map((p) => p.med), borderColor: s1, backgroundColor: s1, borderWidth: 2,
+      pointRadius: 4, pointHoverRadius: 6, pointBorderColor: surf, pointBorderWidth: 2, tension: 0.25 },
+    { label: "Laatste meetdag", data: slots.map((s) => lastRows[s]?.reistijd_min ?? null), borderColor: s2,
+      backgroundColor: s2, borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: surf,
+      pointBorderWidth: 2, tension: 0.25, spanGaps: true },
+  ];
+  const opts = {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        filter: (i) => i.dataset.label !== "25%" && i.dataset.label !== "75%",
+        callbacks: {
+          title: (items) => `Vertrek ${items[0].label}`,
+          label: (i) => `${i.dataset.label}: ${fmt(i.parsed.y)} min`,
+          afterBody: (items) => {
+            const p = per[items[0].dataIndex];
+            return p.n ? [`Meestal ${fmt(p.p25)}–${fmt(p.p75)} min (${p.n} metingen)`] : [];
+          },
+        },
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: muted, maxRotation: 0, autoSkip: true, autoSkipPadding: 10 } },
+      y: { grid: { color: grid }, border: { display: false }, ticks: { color: muted, callback: (v) => `${v} min` },
+           grace: "10%" },
+    },
+  };
+  if (chart) { chart.data.labels = slots; chart.data.datasets = ds; chart.options = opts; chart.update(); }
+  else chart = new Chart(document.getElementById("chart"), { type: "line", data: { labels: slots, datasets: ds }, options: opts });
+}
+
+function drawHeat(slots, data, dates) {
+  const vals = data.map((r) => r.reistijd_min);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const idx = (v) => (hi === lo ? 6 : Math.round(((v - lo) / (hi - lo)) * (SEQ.length - 1)));
+  const map = {};
+  data.forEach((r) => (map[r.datum + "|" + r.vertrektijd] = r));
+  let html = "<thead><tr><th class='day'></th>" + slots.map((s) => `<th>${s}</th>`).join("") + "</tr></thead><tbody>";
+  for (const d of dates) {
+    html += `<tr><th class="day">${fmtDate(d)}</th>`;
+    for (const s of slots) {
+      const r = map[d + "|" + s];
+      if (!r) { html += "<td class='empty'>·</td>"; continue; }
+      const i = idx(r.reistijd_min);
+      const fg = i >= 7 ? "#ffffff" : "#0b0b0b";
+      html += `<td style="background:${SEQ[i]};color:${fg}" title="${fmtDate(d)}, vertrek ${s}: ${fmt(r.reistijd_min)} min` +
+              ` (aankomst ${r.aankomst}, +${fmt(r.vertraging_min)} min vertraging)">${fmt(r.reistijd_min)}</td>`;
+    }
+    html += "</tr>";
+  }
+  document.getElementById("heat").innerHTML = html + "</tbody>";
+  document.getElementById("scaleMin").textContent = `${fmt(lo)} min`;
+  document.getElementById("scaleMax").textContent = `${fmt(hi)} min`;
+}
+
+// Bediening
+document.querySelectorAll("#dirSeg button").forEach((b) => b.addEventListener("click", () => {
+  state.dir = b.dataset.v;
+  document.querySelectorAll("#dirSeg button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  render();
+}));
+document.getElementById("daySel").addEventListener("change", (e) => { state.day = e.target.value; render(); });
+document.getElementById("periodSel").addEventListener("change", (e) => { state.period = +e.target.value; render(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+
+// Standaard: na 12:00 de terugrit tonen
+if (new Date().getHours() >= 12) document.querySelector('#dirSeg button[data-v="terug"]').click();
+
+fetch(`data/reistijden.csv?t=${Date.now()}`)
+  .then((r) => (r.ok ? r.text() : ""))
+  .then((t) => {
+    rows = parseCsv(t);
+    const sub = document.getElementById("sub");
+    if (rows.length) {
+      const l = rows[rows.length - 1];
+      sub.textContent = `Laatste meting: ${fmtDate(l.datum)} om ${l.gemeten_om.slice(0, 5)}`;
+    } else sub.textContent = "Nog geen metingen.";
+    render();
+  })
+  .catch(() => { document.getElementById("sub").textContent = "Kon de metingen niet laden."; render(); });
+</script>
+</body>
+</html>

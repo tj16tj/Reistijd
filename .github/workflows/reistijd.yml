@@ -1,0 +1,51 @@
+name: Reistijd meten
+
+on:
+  schedule:
+    # GitHub rekent in UTC. Per venster staan er twee starttijden: één klopt in
+    # de wintertijd, de andere in de zomertijd. Het script stopt meteen als het
+    # venster nog niet in de buurt is (of al voorbij), dus dubbel meten kan niet.
+    - cron: "25 4,5 * * 1-5"    # ochtend: start om 06:25 lokale tijd (zomer- én wintertijd)
+    - cron: "25 13,14 * * 1-5"  # middag:  start om 15:25 lokale tijd (zomer- én wintertijd)
+  workflow_dispatch:
+    inputs:
+      modus:
+        description: "test = één meting nu, niets opslaan · auto = gewone meting"
+        type: choice
+        options: [test, auto]
+        default: test
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reistijd
+  cancel-in-progress: false
+
+jobs:
+  meten:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reistijd meten
+        env:
+          TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+          ADRES_THUIS: ${{ secrets.ADRES_THUIS }}
+          ADRES_WERK: ${{ secrets.ADRES_WERK }}
+        run: python3 scripts/meet_reistijd.py ${{ github.event.inputs.modus || 'auto' }}
+
+      - name: Metingen opslaan
+        if: always()
+        run: |
+          git config user.name "reistijd-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "Geen nieuwe metingen."
+            exit 0
+          fi
+          git commit -m "Reistijden $(TZ=Europe/Amsterdam date '+%Y-%m-%d %H:%M')"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
