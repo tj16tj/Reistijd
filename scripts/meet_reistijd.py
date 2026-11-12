@@ -19,6 +19,7 @@ Omgevingsvariabelen (in GitHub als repository secrets):
   TOMTOM_API_KEY  je TomTom API key
   ADRES_THUIS     bijv. "Dorpsstraat 1, Plaatsnaam"
   ADRES_WERK      idem, voor het werkadres
+                  (of coördinaten, bijv. "52.3000, 4.8600", voor een exact punt)
 
 Privacy: de logs van een openbare repository zijn voor iedereen te zien. Het script
 print daarom nooit adressen of coördinaten, alleen of het adres herkend is.
@@ -94,6 +95,16 @@ def _norm(tekst: str) -> str:
 
 
 def geocode(key: str, adres: str, label: str) -> str:
+    # Coördinaten ("52.30, 4.86") direct gebruiken, zonder opzoeken.
+    delen = [d.strip() for d in adres.split(",")]
+    if len(delen) == 2:
+        try:
+            lat, lon = float(delen[0]), float(delen[1])
+            if 50 < lat < 54 and 3 < lon < 8:
+                print(f"  adres {label}: coördinaten gebruikt")
+                return f"{lat},{lon}"
+        except ValueError:
+            pass
     q = urllib.parse.quote(adres)
     url = f"{API}/search/2/geocode/{q}.json?key={key}&countrySet=NL&limit=1&language=nl-NL"
     data = api_get(url)

@@ -38,6 +38,9 @@ Ga in de repository naar **Settings → Secrets and variables → Actions → Ne
 | `ADRES_THUIS` | je thuisadres, bijv. `Dorpsstraat 1, Plaatsnaam` |
 | `ADRES_WERK` | je werkadres, in dezelfde vorm |
 
+Vindt TomTom een adres niet precies (de test meldt dan "LET OP"), zet dan coördinaten in het secret,
+bijvoorbeeld `52.3000, 4.8600`. In Google Maps zie je die als je lang op de plek drukt.
+
 ### 4. Dashboard aanzetten
 **Settings → Pages → Build and deployment**: kies *Deploy from a branch*, branch `main`, map `/ (root)`, en **Save**.
 Na een paar minuten staat het dashboard op `https://<jouw-gebruikersnaam>.github.io/reistijd/`.
