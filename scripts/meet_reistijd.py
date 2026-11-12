@@ -162,7 +162,7 @@ def schrijf_regel(regel: dict) -> None:
     CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
     nieuw = not CSV_PATH.exists() or CSV_PATH.stat().st_size == 0
     with CSV_PATH.open("a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=FIELDS)
+        w = csv.DictWriter(f, fieldnames=FIELDS, lineterminator="\n")
         if nieuw:
             w.writeheader()
         w.writerow(regel)
@@ -182,7 +182,7 @@ def samenvoegen(extra_pad: str) -> None:
     volgorde = sorted(regels.values(), key=lambda r: (r["datum"], r["richting"] != "heen", r["vertrektijd"]))
     CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
     with CSV_PATH.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=FIELDS, extrasaction="ignore")
+        w = csv.DictWriter(f, fieldnames=FIELDS, extrasaction="ignore", lineterminator="\n")
         w.writeheader()
         w.writerows(volgorde)
     print(f"{len(volgorde)} metingen in {CSV_PATH.name}")
