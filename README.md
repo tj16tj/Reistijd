@@ -52,8 +52,10 @@ nooit adressen of coördinaten.
 Daarna gaat het vanzelf: de eerste echte metingen komen op de eerstvolgende werkdag om 07:00.
 
 ## Hoe het werkt
-- GitHub start de workflow om 06:25 en 15:25 lokale tijd. In de cron staan twee UTC-tijden per venster, zodat
-  zomer- en wintertijd allebei kloppen. De run die op dat moment niet past, stopt meteen.
+- GitHub start geplande workflows soms tot een uur te laat. Daarom staat er elk half uur een start in de
+  cron, ruim voor elk venster. De eerste run die binnen 100 minuten voor het venster binnenkomt, wacht en meet.
+  De andere runs stoppen meteen.
+- Komen twee runs toch tegelijk binnen, dan worden de metingen bij het opslaan samengevoegd, zonder dubbele regels.
 - Het script wacht zelf tot elk meetmoment. Daardoor zijn de metingen precies om 07:00, 07:05, … ook al start
   GitHub soms een paar minuten later dan gepland.
 - Na het laatste meetmoment commit de workflow de nieuwe regels in `data/reistijden.csv`, waarna het dashboard
@@ -66,7 +68,7 @@ Daarna gaat het vanzelf: de eerste echte metingen komen op de eerstvolgende werk
   Workflow permissions → *Read and write permissions*.
 - **"Ontbrekende instelling"**: een secret heeft een andere naam of is leeg (stap 3).
 - **TomTom geeft fout 403**: de key klopt niet, of Routing/Search staat niet aan voor deze key in het TomTom-dashboard.
-- **Een meetmoment ontbreekt**: GitHub startte de workflow meer dan ~35 minuten te laat. Dat komt zelden voor.
-  Gemiste momenten worden overgeslagen.
+- **Een meetmoment ontbreekt**: GitHub startte alle runs van die ochtend of middag te laat. Gemiste momenten
+  worden overgeslagen.
 - **Tijden aanpassen**: wijzig `WINDOWS` bovenin `scripts/meet_reistijd.py`. Als het venster ver verschuift,
-  pas dan ook de cron-tijden in `.github/workflows/reistijd.yml` aan.
+  pas dan ook de cron-uren in `.github/workflows/reistijd.yml` aan.

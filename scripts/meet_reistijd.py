@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Meet de reistijd met de auto tussen thuis en werk.
 
-Wordt gestart door GitHub Actions, een paar minuten voor elk meetvenster:
+Wordt gestart door GitHub Actions, ruim voor elk meetvenster (GitHub start geplande
+workflows soms tot een uur te laat, daarom zijn er meerdere starttijden):
   heen  (thuis -> werk): vertrek 07:00 t/m 07:30, elke 5 minuten
   terug (werk -> thuis): vertrek 16:00 t/m 17:00, elke 5 minuten
 
@@ -11,6 +12,8 @@ reistijd op (met live verkeer). Elke meting komt als regel in data/reistijden.cs
 Gebruik:
   python3 scripts/meet_reistijd.py auto   # kiest zelf het venster dat nu (bijna) loopt
   python3 scripts/meet_reistijd.py test   # doet één meting per richting, schrijft niets weg
+  python3 scripts/meet_reistijd.py samenvoegen <csv>  # voegt metingen uit <csv> toe aan data/,
+                                                      # zonder dubbele regels
 
 Omgevingsvariabelen (in GitHub als repository secrets):
   TOMTOM_API_KEY  je TomTom API key
@@ -41,7 +44,7 @@ WINDOWS = {
     "terug": ((16, 0), (17, 0)),
 }
 INTERVAL_MIN = 5
-MAX_VROEG_MIN = 40      # start alleen als het venster binnen 40 min begint
+MAX_VROEG_MIN = 100     # start alleen als het venster binnen 100 min begint
 TE_LAAT_SEC = 120       # meetmoment dat langer dan 2 min voorbij is: overslaan
 
 CSV_PATH = Path(__file__).resolve().parent.parent / "data" / "reistijden.csv"
@@ -165,6 +168,26 @@ def schrijf_regel(regel: dict) -> None:
         w.writerow(regel)
 
 
+def samenvoegen(extra_pad: str) -> None:
+    """Voeg regels uit extra_pad toe aan CSV_PATH; per datum+richting+vertrektijd één regel."""
+    def lees(pad):
+        pad = Path(pad)
+        if not pad.exists() or pad.stat().st_size == 0:
+            return []
+        with pad.open(newline="", encoding="utf-8") as f:
+            return list(csv.DictReader(f))
+    regels = {}
+    for r in lees(CSV_PATH) + lees(extra_pad):
+        regels.setdefault((r["datum"], r["richting"], r["vertrektijd"]), r)
+    volgorde = sorted(regels.values(), key=lambda r: (r["datum"], r["richting"] != "heen", r["vertrektijd"]))
+    CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with CSV_PATH.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=FIELDS, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(volgorde)
+    print(f"{len(volgorde)} metingen in {CSV_PATH.name}")
+
+
 def maak_regel(richting: str, moment: datetime, gemeten: datetime, s: dict) -> dict:
     reis = s["travelTimeInSeconds"]
     zonder = s.get("noTrafficTravelTimeInSeconds", reis - s.get("trafficDelayInSeconds", 0))
@@ -191,6 +214,9 @@ def env(naam: str) -> str:
 
 
 def main(modus: str) -> None:
+    if modus == "samenvoegen":
+        samenvoegen(sys.argv[2])
+        return
     key = env("TOMTOM_API_KEY")
     thuis_adres, werk_adres = env("ADRES_THUIS"), env("ADRES_WERK")
     nu = now_local()

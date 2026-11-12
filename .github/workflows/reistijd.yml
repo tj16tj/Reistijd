@@ -2,11 +2,12 @@ name: Reistijd meten
 
 on:
   schedule:
-    # GitHub rekent in UTC. Per venster staan er twee starttijden: één klopt in
-    # de wintertijd, de andere in de zomertijd. Het script stopt meteen als het
-    # venster nog niet in de buurt is (of al voorbij), dus dubbel meten kan niet.
-    - cron: "25 4,5 * * 1-5"    # ochtend: start om 06:25 lokale tijd (zomer- én wintertijd)
-    - cron: "25 13,14 * * 1-5"  # middag:  start om 15:25 lokale tijd (zomer- én wintertijd)
+    # GitHub rekent in UTC en start geplande workflows soms tot een uur te laat.
+    # Daarom elk half uur een start, ruim voor het venster (zomer- én wintertijd).
+    # De eerste run die binnen 100 min voor het venster valt, wacht en meet. De rest
+    # stopt meteen, of wacht in de rij en ziet daarna dat alles al gemeten is.
+    - cron: "*/30 3-6 * * 1-5"    # ochtend: 04:00–07:30 (winter) / 05:00–08:30 (zomer)
+    - cron: "*/30 12-15 * * 1-5"  # middag:  13:00–16:30 (winter) / 14:00–17:30 (zomer)
   workflow_dispatch:
     inputs:
       modus:
@@ -25,9 +26,9 @@ concurrency:
 jobs:
   meten:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 200
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Reistijd meten
         env:
@@ -41,11 +42,24 @@ jobs:
         run: |
           git config user.name "reistijd-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/
-          if git diff --cached --quiet; then
-            echo "Geen nieuwe metingen."
-            exit 0
-          fi
-          git commit -m "Reistijden $(TZ=Europe/Amsterdam date '+%Y-%m-%d %H:%M')"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          cp data/reistijden.csv /tmp/nieuw.csv 2>/dev/null || exit 0
+          # Voeg samen met wat er intussen online staat (bijv. van een andere run),
+          # zonder dubbele regels. Bij een push-botsing: opnieuw proberen.
+          for poging in 1 2 3; do
+            git fetch -q origin "${GITHUB_REF_NAME}"
+            git reset -q --hard "origin/${GITHUB_REF_NAME}"
+            python3 scripts/meet_reistijd.py samenvoegen /tmp/nieuw.csv
+            git add data/
+            if git diff --cached --quiet; then
+              echo "Geen nieuwe metingen."
+              exit 0
+            fi
+            git commit -q -m "Reistijden $(TZ=Europe/Amsterdam date '+%Y-%m-%d %H:%M')"
+            if git push -q origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "Opgeslagen."
+              exit 0
+            fi
+            sleep $((poging * 10))
+          done
+          echo "Opslaan mislukt na 3 pogingen."
+          exit 1
